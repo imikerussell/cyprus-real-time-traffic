@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cyprus Real-Time Traffic Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #map {
+            height: 100vh;
+            width: 100%;
+        }
+
+        .control-panel {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            z-index: 1000;
+            min-width: 250px;
+        }
+
+        .control-panel h3 {
+            margin-bottom: 15px;
+            color: #333;
+            font-size: 18px;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 8px;
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #555;
+            font-weight: 500;
+        }
+
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 24px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: #28a745;
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+
+        .status {
+            font-size: 12px;
+            color: #666;
+            margin-top: 8px;
+        }
+
+        .status.active {
+            color: #28a745;
+            font-weight: bold;
+        }
+
+        .legend {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            position: absolute;
+            bottom: 30px;
+            right: 10px;
+            z-index: 1000;
+            max-width: 250px;
+        }
+
+        .legend h4 {
+            margin-bottom: 10px;
+            color: #333;
+            font-size: 14px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 12px;
+        }
+
+        .legend-color {
+            width: 30px;
+            height: 4px;
+            margin-right: 10px;
+            border-radius: 2px;
+        }
+
+        .legend-marker {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 10px;
+            border: 2px solid white;
+        }
+
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 20px 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 20px rgba(0,0,0,0.3);
+            z-index: 2000;
+            font-size: 18px;
+            color: #333;
+        }
+
+        .last-update {
+            font-size: 11px;
+            color: #888;
+            margin-top: 10px;
+            font-style: italic;
+        }
+
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            width: 100%;
+            margin-top: 10px;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #0056b3;
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        .stats {
+            font-size: 12px;
+            color: #555;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #eee;
+        }
+
+        .stats div {
+            margin-bottom: 4px;
+        }
+
+        .stats strong {
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div class="loading" id="loading">Loading traffic data...</div>
+
+    <div class="control-panel">
+        <h3>🇨🇾 Cyprus Traffic</h3>
+
+        <div class="control-group">
+            <label>
+                Auto-refresh (1 min)
+                <label class="toggle-switch">
+                    <input type="checkbox" id="autoRefresh">
+                    <span class="slider"></span>
+                </label>
+            </label>
+            <div class="status" id="refreshStatus">Auto-refresh disabled</div>
+        </div>
+
+        <button onclick="loadTrafficData()">🔄 Refresh Now</button>
+
+        <div class="last-update" id="lastUpdate">Never updated</div>
+
+        <div class="stats" id="stats">
+            <div><strong>Sites:</strong> <span id="siteCount">-</span></div>
+            <div><strong>Routes:</strong> <span id="routeCount">-</span></div>
+        </div>
+    </div>
+
+    <div class="legend">
+        <h4>Legend</h4>
+        <div class="legend-item">
+            <div class="legend-marker" style="background: #007bff;"></div>
+            <span>Measurement Site</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #28a745;"></div>
+            <span>Fast (>60 km/h)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #ffc107;"></div>
+            <span>Moderate (30-60 km/h)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #ff6b6b;"></div>
+            <span>Slow (<30 km/h)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #999;"></div>
+            <span>No data</span>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Initialize map centered on Cyprus
+        const map = L.map('map').setView([35.0, 33.3], 10);
+
+        // Add OpenStreetMap tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 19
+        }).addTo(map);
+
+        // Layer groups
+        let measurementSitesLayer = L.layerGroup().addTo(map);
+        let routesLayer = L.layerGroup().addTo(map);
+
+        // Auto-refresh state
+        let autoRefreshInterval = null;
+        const autoRefreshCheckbox = document.getElementById('autoRefresh');
+        const refreshStatus = document.getElementById('refreshStatus');
+
+        // API endpoints
+        const ENDPOINTS = {
+            sites: 'https://www.traffic4cyprus.org.cy/swarco3/api/Data/BTMeasurementSiteTablePublication',
+            locations: 'https://www.traffic4cyprus.org.cy/swarco3/api/Data/PredefinedLocationPublication',
+            data: 'https://www.traffic4cyprus.org.cy/swarco3/api/Data/PredefinedLocationDataPublication'
+        };
+
+        // Parse XML utility
+        function parseXML(xmlString) {
+            return new DOMParser().parseFromString(xmlString, 'text/xml');
+        }
+
+        // Get color based on speed
+        function getSpeedColor(speed) {
+            if (speed === -1 || speed === null) return '#999';
+            if (speed > 60) return '#28a745';
+            if (speed > 30) return '#ffc107';
+            return '#ff6b6b';
+        }
+
+        // Parse coordinates from GML format
+        function parseGMLCoordinates(posList) {
+            if (!posList) return [];
+            const coords = posList.trim().split(/\s+/);
+            const points = [];
+            for (let i = 0; i < coords.length; i += 2) {
+                if (coords[i] && coords[i + 1]) {
+                    const lat = parseFloat(coords[i + 1]);
+                    const lon = parseFloat(coords[i]);
+                    if (!isNaN(lat) && !isNaN(lon)) {
+                        points.push([lat, lon]);
+                    }
+                }
+            }
+            return points;
+        }
+
+        // Load measurement sites
+        async function loadMeasurementSites() {
+            try {
+                const response = await fetch(ENDPOINTS.sites);
+                const xmlText = await response.text();
+                const xml = parseXML(xmlText);
+
+                const sites = xml.querySelectorAll('measurementSiteRecord');
+                measurementSitesLayer.clearLayers();
+
+                let siteCount = 0;
+                sites.forEach(site => {
+                    const name = site.querySelector('measurementSiteName value')?.textContent || 'Unknown';
+                    const id = site.querySelector('measurementSiteIdentification')?.textContent || '';
+
+                    const lat = parseFloat(site.querySelector('latitude')?.textContent);
+                    const lon = parseFloat(site.querySelector('longitude')?.textContent);
+
+                    if (!isNaN(lat) && !isNaN(lon)) {
+                        const marker = L.circleMarker([lat, lon], {
+                            radius: 6,
+                            fillColor: '#007bff',
+                            color: '#fff',
+                            weight: 2,
+                            opacity: 1,
+                            fillOpacity: 0.8
+                        });
+
+                        marker.bindPopup(`
+                            <strong>${name}</strong><br>
+                            <small>ID: ${id}</small><br>
+                            <small>Lat: ${lat.toFixed(5)}, Lon: ${lon.toFixed(5)}</small>
+                        `);
+
+                        marker.addTo(measurementSitesLayer);
+                        siteCount++;
+                    }
+                });
+
+                document.getElementById('siteCount').textContent = siteCount;
+                return siteCount;
+            } catch (error) {
+                console.error('Error loading measurement sites:', error);
+                return 0;
+            }
+        }
+
+        // Load route locations and data
+        async function loadRoutes() {
+            try {
+                // Load route geometries
+                const locResponse = await fetch(ENDPOINTS.locations);
+                const locXmlText = await locResponse.text();
+                const locXml = parseXML(locXmlText);
+
+                // Load route data
+                const dataResponse = await fetch(ENDPOINTS.data);
+                const dataXmlText = await dataResponse.text();
+                const dataXml = parseXML(dataXmlText);
+
+                // Create map of route data
+                const routeDataMap = {};
+                dataXml.querySelectorAll('predefinedLocationReference').forEach(ref => {
+                    const id = ref.getAttribute('id');
+                    const speed = parseFloat(ref.querySelector('obs_speed')?.textContent || '-1');
+                    const time = parseFloat(ref.querySelector('obs_t_time')?.textContent || '-1');
+                    const name = ref.querySelector('predefinedLocationName value')?.textContent || '';
+
+                    routeDataMap[id] = { speed, time, name };
+                });
+
+                routesLayer.clearLayers();
+                let routeCount = 0;
+
+                // Draw routes with data
+                locXml.querySelectorAll('predefinedLocationReference').forEach(ref => {
+                    const id = ref.getAttribute('id');
+                    const posListElement = ref.querySelector('posList');
+
+                    if (posListElement) {
+                        const coords = parseGMLCoordinates(posListElement.textContent);
+
+                        if (coords.length >= 2) {
+                            const routeData = routeDataMap[id] || { speed: -1, time: -1, name: 'Unknown' };
+                            const color = getSpeedColor(routeData.speed);
+
+                            const polyline = L.polyline(coords, {
+                                color: color,
+                                weight: 4,
+                                opacity: 0.7
+                            });
+
+                            const speedText = routeData.speed === -1 ? 'No data' : `${routeData.speed} km/h`;
+                            const timeText = routeData.time === -1 ? 'No data' : `${Math.round(routeData.time)} seconds`;
+
+                            polyline.bindPopup(`
+                                <strong>Route: ${routeData.name}</strong><br>
+                                <strong>Speed:</strong> ${speedText}<br>
+                                <strong>Travel Time:</strong> ${timeText}
+                            `);
+
+                            polyline.addTo(routesLayer);
+                            routeCount++;
+                        }
+                    }
+                });
+
+                document.getElementById('routeCount').textContent = routeCount;
+                return routeCount;
+            } catch (error) {
+                console.error('Error loading routes:', error);
+                return 0;
+            }
+        }
+
+        // Load all traffic data
+        async function loadTrafficData() {
+            document.getElementById('loading').style.display = 'block';
+
+            try {
+                await Promise.all([
+                    loadMeasurementSites(),
+                    loadRoutes()
+                ]);
+
+                const now = new Date();
+                document.getElementById('lastUpdate').textContent =
+                    `Last updated: ${now.toLocaleTimeString()}`;
+            } catch (error) {
+                console.error('Error loading traffic data:', error);
+                alert('Failed to load traffic data. Please check your connection and try again.');
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
+        }
+
+        // Auto-refresh toggle
+        autoRefreshCheckbox.addEventListener('change', function() {
+            if (this.checked) {
+                refreshStatus.textContent = 'Auto-refresh enabled (1 min)';
+                refreshStatus.classList.add('active');
+                autoRefreshInterval = setInterval(loadTrafficData, 60000); // 60 seconds
+            } else {
+                refreshStatus.textContent = 'Auto-refresh disabled';
+                refreshStatus.classList.remove('active');
+                if (autoRefreshInterval) {
+                    clearInterval(autoRefreshInterval);
+                    autoRefreshInterval = null;
+                }
+            }
+        });
+
+        // Initial load
+        loadTrafficData();
+    </script>
+</body>
+</html>
