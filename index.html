@@ -281,11 +281,11 @@
         const autoRefreshCheckbox = document.getElementById('autoRefresh');
         const refreshStatus = document.getElementById('refreshStatus');
 
-        // API endpoints
+        // API endpoints - using local proxy to avoid CORS issues
         const ENDPOINTS = {
-            sites: 'https://www.traffic4cyprus.org.cy/swarco3/api/Data/BTMeasurementSiteTablePublication',
-            locations: 'https://www.traffic4cyprus.org.cy/swarco3/api/Data/PredefinedLocationPublication',
-            data: 'https://www.traffic4cyprus.org.cy/swarco3/api/Data/PredefinedLocationDataPublication'
+            sites: '/api/sites',
+            locations: '/api/locations',
+            data: '/api/data'
         };
 
         // Parse XML utility
