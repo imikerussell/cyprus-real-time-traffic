@@ -314,15 +314,18 @@
                     const lat = parseFloat(coords[0]);
                     const lon = parseFloat(coords[1]);
 
-                    // Validate coordinates are within Cyprus bounds
-                    // Cyprus: ~34.5-35.7°N, ~32.2-34.6°E
+                    // Validate coordinates are within reasonable bounds
+                    // Cyprus: ~34.5-35.7°N, ~32.2-34.6°E (using wider range for safety)
                     if (!isNaN(lat) && !isNaN(lon) &&
-                        lat >= 34 && lat <= 36 &&
+                        lat >= 33 && lat <= 36 &&
                         lon >= 32 && lon <= 35) {
                         points.push([lat, lon]);
+                    } else {
+                        console.warn('Invalid coordinate filtered:', { lat, lon, original: pairs[i] });
                     }
                 }
             }
+            console.log(`Parsed ${points.length} valid coordinates from ${pairs.length} pairs`);
             return points;
         }
 
@@ -330,10 +333,14 @@
         async function loadMeasurementSites() {
             try {
                 const response = await fetch(ENDPOINTS.sites);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
                 const xmlText = await response.text();
                 const xml = parseXML(xmlText);
 
                 const sites = xml.querySelectorAll('measurementSiteRecord');
+                console.log(`Found ${sites.length} measurement sites`);
                 measurementSitesLayer.clearLayers();
 
                 let siteCount = 0;
@@ -365,10 +372,12 @@
                     }
                 });
 
+                console.log(`Plotted ${siteCount} measurement sites`);
                 document.getElementById('siteCount').textContent = siteCount;
                 return siteCount;
             } catch (error) {
                 console.error('Error loading measurement sites:', error);
+                alert(`Failed to load measurement sites: ${error.message}`);
                 return 0;
             }
         }
@@ -377,12 +386,20 @@
         async function loadRoutes() {
             try {
                 // Load route geometries
+                console.log('Fetching route locations...');
                 const locResponse = await fetch(ENDPOINTS.locations);
+                if (!locResponse.ok) {
+                    throw new Error(`HTTP ${locResponse.status}: ${locResponse.statusText}`);
+                }
                 const locXmlText = await locResponse.text();
                 const locXml = parseXML(locXmlText);
 
                 // Load route data
+                console.log('Fetching route data...');
                 const dataResponse = await fetch(ENDPOINTS.data);
+                if (!dataResponse.ok) {
+                    throw new Error(`HTTP ${dataResponse.status}: ${dataResponse.statusText}`);
+                }
                 const dataXmlText = await dataResponse.text();
                 const dataXml = parseXML(dataXmlText);
 
@@ -401,7 +418,10 @@
                 let routeCount = 0;
 
                 // Draw routes with data
-                locXml.querySelectorAll('predefinedLocationReference').forEach(ref => {
+                const allRefs = locXml.querySelectorAll('predefinedLocationReference');
+                console.log(`Found ${allRefs.length} location references`);
+
+                allRefs.forEach(ref => {
                     const id = ref.getAttribute('id');
                     const posListElement = ref.querySelector('posList');
 
@@ -429,14 +449,21 @@
 
                             polyline.addTo(routesLayer);
                             routeCount++;
+                        } else {
+                            console.warn(`Route ${id}: Not enough coordinates (${coords.length})`);
                         }
+                    } else {
+                        console.warn(`Route ${id}: No posList element found`);
                     }
                 });
+
+                console.log(`Plotted ${routeCount} routes on map`);
 
                 document.getElementById('routeCount').textContent = routeCount;
                 return routeCount;
             } catch (error) {
                 console.error('Error loading routes:', error);
+                alert(`Failed to load routes: ${error.message}`);
                 return 0;
             }
         }
