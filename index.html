@@ -302,15 +302,23 @@
         }
 
         // Parse coordinates from GML format
+        // Format: "lat1,lon1 lat2,lon2 lat3,lon3"
         function parseGMLCoordinates(posList) {
             if (!posList) return [];
-            const coords = posList.trim().split(/\s+/);
+            const pairs = posList.trim().split(/\s+/);
             const points = [];
-            for (let i = 0; i < coords.length; i += 2) {
-                if (coords[i] && coords[i + 1]) {
-                    const lat = parseFloat(coords[i + 1]);
-                    const lon = parseFloat(coords[i]);
-                    if (!isNaN(lat) && !isNaN(lon)) {
+
+            for (let i = 0; i < pairs.length; i++) {
+                const coords = pairs[i].split(',');
+                if (coords.length === 2) {
+                    const lat = parseFloat(coords[0]);
+                    const lon = parseFloat(coords[1]);
+
+                    // Validate coordinates are within Cyprus bounds
+                    // Cyprus: ~34.5-35.7°N, ~32.2-34.6°E
+                    if (!isNaN(lat) && !isNaN(lon) &&
+                        lat >= 34 && lat <= 36 &&
+                        lon >= 32 && lon <= 35) {
                         points.push([lat, lon]);
                     }
                 }
